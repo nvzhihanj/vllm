@@ -1032,6 +1032,16 @@ class WorkerProc:
     def worker_busy_loop(self):
         """Main busy loop for Multiprocessing Workers."""
         assert self.rpc_broadcast_mq is not None
+        # DEBUG ONLY: VLLM_WORKER_CPROFILE=<delay_s>:<duration_s>:<out_prefix>.
+        import os as _os
+        _spec = _os.environ.get("VLLM_WORKER_CPROFILE")
+        if _spec:
+            from vllm.v1.engine.core import _EngineCoreCProfile
+            _os.environ["VLLM_EC_CPROFILE"] = _spec
+            _wprof = _EngineCoreCProfile()
+            while True:
+                _wprof.tick()
+                self._execute_worker_rpc(self.rpc_broadcast_mq.dequeue(indefinite=True))
         while True:
             self._execute_worker_rpc(self.rpc_broadcast_mq.dequeue(indefinite=True))
 
