@@ -110,6 +110,49 @@ HANDSHAKE_TIMEOUT_MINS = 5
 _R = TypeVar("_R")  # Return type for collective_rpc
 
 
+
+class _EngineCoreCProfile:
+    """DEBUG ONLY: VLLM_EC_CPROFILE=<delay_s>:<duration_s>:<out_prefix> profiles the
+    EngineCore busy-loop thread with cProfile for duration_s after delay_s and writes
+    <out_prefix>.<pid>.prof plus a text summary."""
+
+    def __init__(self) -> None:
+        import os
+        spec = os.environ.get("VLLM_EC_CPROFILE")
+        self.active = bool(spec)
+        if not self.active:
+            return
+        delay, duration, self.prefix = spec.split(":", 2)
+        import time
+        self.start_at = time.monotonic() + float(delay)
+        self.stop_at = self.start_at + float(duration)
+        self.prof = None
+        self.done = False
+
+    def tick(self) -> None:
+        if not self.active or self.done:
+            return
+        import time
+        now = time.monotonic()
+        if self.prof is None and now >= self.start_at:
+            import cProfile
+            self.prof = cProfile.Profile()
+            self.prof.enable()
+        elif self.prof is not None and now >= self.stop_at:
+            import io
+            import os
+            import pstats
+            self.prof.disable()
+            self.done = True
+            path = f"{self.prefix}.{os.getpid()}"
+            self.prof.dump_stats(path + ".prof")
+            buf = io.StringIO()
+            st = pstats.Stats(self.prof, stream=buf)
+            st.sort_stats("tottime").print_stats(60)
+            st.sort_stats("cumulative").print_stats(80)
+            with open(path + ".txt", "w") as f:
+                f.write(buf.getvalue())
+
 class EngineCore:
     """Inner loop of vLLM's Engine."""
 
@@ -1485,7 +1528,9 @@ class EngineCoreProc(EngineCore):
     @fault_tolerant_wrapper
     def run_busy_loop(self):
         """Core busy loop of the EngineCore."""
+        _ecprof = _EngineCoreCProfile()
         while self._handle_shutdown():
+            _ecprof.tick()
             # 1) Poll the input queue until there is work to do.
             self._process_input_queue()
             # Publish request counts before and after GPU step to ensure freshness.
@@ -2270,8 +2315,10 @@ class DPEngineCoreProc(EngineCoreProc):
     @fault_tolerant_wrapper
     def run_busy_loop(self):
         """Core busy loop of the EngineCore for data parallel case."""
+        _ecprof = _EngineCoreCProfile()
         # Loop until process is sent a SIGINT or SIGTERM
         while self._handle_shutdown():
+            _ecprof.tick()
             # 1) Poll the input queue until there is work to do.
             was_running = self.engines_running
             self._process_input_queue()
