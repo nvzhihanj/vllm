@@ -1032,6 +1032,10 @@ class WorkerProc:
     def worker_busy_loop(self):
         """Main busy loop for Multiprocessing Workers."""
         assert self.rpc_broadcast_mq is not None
+        # DEBUG ONLY: VLLM_DEBUG_NVTX=1 wraps worker phases in NVTX ranges.
+        from vllm.utils.nvtx_debug import install as _install_nvtx
+
+        _install_nvtx("worker")
         # DEBUG ONLY: VLLM_WORKER_CPROFILE=<delay_s>:<duration_s>:<out_prefix>.
         import os as _os
         _spec = _os.environ.get("VLLM_WORKER_CPROFILE")

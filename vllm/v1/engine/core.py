@@ -1528,6 +1528,9 @@ class EngineCoreProc(EngineCore):
     @fault_tolerant_wrapper
     def run_busy_loop(self):
         """Core busy loop of the EngineCore."""
+        from vllm.utils.nvtx_debug import install as _install_nvtx
+
+        _install_nvtx("engine")
         _ecprof = _EngineCoreCProfile()
         while self._handle_shutdown():
             _ecprof.tick()
@@ -2315,6 +2318,9 @@ class DPEngineCoreProc(EngineCoreProc):
     @fault_tolerant_wrapper
     def run_busy_loop(self):
         """Core busy loop of the EngineCore for data parallel case."""
+        from vllm.utils.nvtx_debug import install as _install_nvtx
+
+        _install_nvtx("engine")
         _ecprof = _EngineCoreCProfile()
         # Loop until process is sent a SIGINT or SIGTERM
         while self._handle_shutdown():
