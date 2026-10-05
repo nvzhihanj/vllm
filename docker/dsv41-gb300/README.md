@@ -14,8 +14,10 @@ results are in the `mlperf-endpoints` repository under
 
 ## Commits
 
-All new behavior is off unless its environment variable is set, except the two
-kernel changes, which produce identical results.
+All new behavior is off unless its environment variable is set, except three
+always-on changes that leave results unchanged: the two kernel speedups
+(`85dd986b`, `9e2fe8d8`) and the residual-mass out-of-bounds read fix
+(`c78e748f`).
 
 | Commit | Change | Enable | Effect (DEP4, C2048 unless noted) |
 | --- | --- | --- | --- |
@@ -56,14 +58,19 @@ them are public.
 
 The canonical build is `mlperf-endpoints/NVIDIA/src/deepseek-v4.1-flash/BUILD.md`
 (build arguments in `configs/vllm-build-args.txt`, revision in
-`configs/dependencies.json`). With Docker on a native arm64 host it amounts to:
+`configs/dependencies.json`; the published image is built from
+`339f2948292906226900b211828dc568eb5d45ad`). With Docker on a native arm64 host
+it amounts to:
 
 ```bash
 git clone --branch dsv41-flash-gb300-opt https://github.com/nvzhihanj/vllm.git && cd vllm
+# setuptools-scm and the Dockerfile's GIT_REPO_CHECK need a vLLM release tag.
+git fetch --no-tags https://github.com/vllm-project/vllm.git refs/tags/v0.20.2rc0:refs/tags/v0.20.2rc0
+git checkout --detach 339f2948292906226900b211828dc568eb5d45ad
 mapfile -t args < <(grep -vE '^[[:space:]]*(#|$)' <mlperf-endpoints>/NVIDIA/src/deepseek-v4.1-flash/configs/vllm-build-args.txt)
 docker buildx build --platform linux/arm64 --target vllm-openai \
   "${args[@]/#/--build-arg=}" --build-arg "VLLM_BUILD_COMMIT=$(git rev-parse HEAD)" \
-  --tag <registry>/<image>-vllm -f docker/Dockerfile .
+  --tag <registry>/<image>-vllm --push -f docker/Dockerfile .
 docker buildx build --platform linux/arm64 \
   --build-arg VLLM_IMAGE=<registry>/<image>-vllm --build-arg DYNAMO_VERSION=1.6.0.dev20260924 \
   --tag <registry>/<image> <mlperf-endpoints>/NVIDIA/src/deepseek-v4.1-flash/configs
